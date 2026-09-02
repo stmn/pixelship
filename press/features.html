@@ -1,0 +1,35 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="_base.css">
+<style>.two{display:grid;grid-template-columns:1fr 1fr;gap:34px;margin-top:6px}
+.card{border:1px solid rgba(255,255,255,.08);border-radius:10px;background:transparent;padding:20px 22px}
+.card h3{margin:0 0 4px;font-size:13px;letter-spacing:.05em;color:#eaf1ff}
+.card p{margin:0 0 16px;font-size:11.5px;color:#8794ad;line-height:1.5;min-height:52px}
+.card img{max-width:100%;height:auto}
+.sizes{display:flex;align-items:flex-end;justify-content:center;gap:14px}
+.sizes figure{margin:0;text-align:center}
+.sizes figcaption{margin-top:7px;font-size:10.5px;color:#63708a;letter-spacing:.06em}
+.metric{margin-top:14px;font-size:11.5px;color:#6ea8ff;text-align:center;font-variant-numeric:tabular-nums}
+</style>
+<body><div class="wrap"><div class="h" id="t"></div>
+<div class="sub">Two properties that are hard to get right, both measured rather than asserted.</div>
+<div class="two">
+  <div class="card"><h3>The size slider changes resolution, not design</h3>
+    <p>The automaton runs on a fixed logical grid and the result is resampled, so a seed keeps its identity at every output size.</p>
+    <div class="sizes">
+      <figure><img src="size_16.png"><figcaption>16 PX</figcaption></figure>
+      <figure><img src="size_32.png"><figcaption>32 PX</figcaption></figure>
+      <figure><img src="size_64.png"><figcaption>64 PX</figcaption></figure>
+      <figure><img src="size_96.png"><figcaption>96 PX</figcaption></figure>
+    </div>
+    <div class="metric">silhouette overlap across sizes: 0.875 – 0.919 median</div>
+  </div>
+  <div class="card"><h3>Banking is a real rotation, not a squash</h3>
+    <p>The shading pass already yields a height field, so the hull is rotated about its long axis with a depth buffer: the near wing covers the far one.</p>
+    <div class="sizes" style="display:block"><img src="bank_poses.png" style="width:100%"></div>
+    <div class="metric">300 poses rendered, 0 rows torn</div>
+  </div>
+</div>
+<div class="foot">Runs from a single folder with no build step, no dependencies and no network.</div>
+</div>
+<script src="../app/pixelfont.js"></script>
+<script>document.getElementById("t").appendChild(PixelFont.render("BUILT TO BE USED",{scale:4,color:"#eaf1ff"}));</script>
+</body>

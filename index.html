@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixelship - procedural spaceship generator</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#111725; --panel2:#0d1220; --line:#212a3d; --fg:#e2e8f6;
+    --dim:#8794ad; --accent:#6ea8ff; --warn:#ffb26e;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);overflow:hidden;
+       font:13px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+
+  #app{display:grid;grid-template-columns:288px 1fr;height:100vh}
+  @media (max-width:860px){#app{grid-template-columns:1fr;overflow:auto;height:auto}}
+
+  /* ---------- control panel ---------- */
+  aside{background:var(--panel);border-right:1px solid var(--line);
+        display:flex;flex-direction:column;min-height:0}
+  aside header{padding:16px 16px 12px;border-bottom:1px solid var(--line)}
+  aside header canvas{image-rendering:pixelated;display:block}
+  /* align-items:flex-start, or a column flex container stretches the canvases
+     and the shorter line renders bigger than the longer one */
+  .brandSub{margin-top:7px;display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+  #panel{overflow-y:auto;padding:4px 0 24px;flex:1;min-height:0}
+
+  .group{border-bottom:1px solid var(--line)}
+  .group>summary{padding:9px 16px;cursor:pointer;font-size:11px;font-weight:700;
+                 letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+                 list-style:none;user-select:none;
+                 display:flex;align-items:center;gap:9px}
+  .group>summary::-webkit-details-marker{display:none}
+  .group>summary:hover{color:var(--fg)}
+  .group[open]>summary{color:var(--fg)}
+  .group .body{padding:2px 16px 12px}
+
+  .row{display:grid;grid-template-columns:1fr auto;gap:2px 8px;align-items:center;
+       margin:0 0 9px}
+  .row label{font-size:11.5px;color:var(--dim);grid-column:1}
+  .row .val{font-size:11px;color:var(--fg);font-variant-numeric:tabular-nums;
+            grid-column:2;text-align:right;min-width:44px}
+  .row input[type=range]{grid-column:1/3;width:100%;accent-color:var(--accent);margin:0}
+  .row select,.row input[type=text],.row input[type=number]{
+       grid-column:1/3;width:100%;background:var(--panel2);color:var(--fg);
+       border:1px solid var(--line);border-radius:5px;padding:5px 7px;font:inherit;font-size:12px}
+  .row.inline{grid-template-columns:1fr auto}
+  .row.inline label{grid-column:1}
+  .row.inline input[type=checkbox]{grid-column:2;accent-color:var(--accent);margin:0}
+  .hint{font-size:10.5px;color:#63708a;margin:-6px 0 10px;grid-column:1/3}
+
+  /* ---------- stage ---------- */
+  main{display:flex;flex-direction:column;min-width:0;min-height:0}
+  /* never wrap: the toolbar gives up label text before it gives up its line */
+  .toolbar{display:flex;gap:10px;align-items:center;flex-wrap:nowrap;
+           padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel2)}
+  .toolbar .sp{flex:1 1 auto;min-width:0}
+  .toolbar button{flex:none}
+  .seedbox{flex:none}
+  button{background:#1c2537;border:1px solid var(--line);color:var(--fg);border-radius:6px;
+         padding:6px 12px;font:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
+  button:hover{background:#26324a;border-color:#3a4763}
+  button.primary{background:#22406e;border-color:#325a96}
+  button.primary:hover{background:#2a4f88}
+  .seedbox{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--dim)}
+  .seedbox input{width:120px;background:var(--panel2);color:var(--fg);border:1px solid var(--line);
+                 border-radius:5px;padding:5px 7px;font:inherit;font-size:12px}
+
+  /* below this the labels go and the icons carry the meaning (title tooltips stay) */
+  @media (max-width:1010px){
+    .toolbar button span{display:none}
+    .toolbar button{padding:7px 10px}
+    .toolbar{gap:8px}
+    .seedbox input{width:92px}
+  }
+  @media (max-width:900px){ .notice{display:none} }
+
+  .stage{flex:1;display:flex;min-height:0;overflow:hidden}
+  @media (max-width:860px){.stage{flex-direction:column;overflow:visible}}
+  .hero{flex:0 0 340px;display:flex;flex-direction:column;align-items:center;
+        justify-content:center;gap:12px;padding:20px;border-right:1px solid var(--line);
+        background:radial-gradient(circle at 50% 40%,#121a2b 0%,#0a0d14 70%)}
+  .hero canvas{image-rendering:pixelated}
+  .hero .meta{font-size:11px;color:var(--dim);text-align:center;line-height:1.7}
+  .hero .meta b{color:var(--fg);font-weight:600}
+
+  .gallery{flex:1;overflow-y:auto;padding:14px;display:flex;flex-wrap:wrap;
+           align-content:flex-start;gap:10px}
+  /* a class-level display beats the UA [hidden] rule, so restate it */
+  [hidden]{display:none !important}
+  .tile{background:#080b12;border:1px solid var(--line);border-radius:8px;padding:6px;
+        display:flex;align-items:center;justify-content:center;cursor:pointer;position:relative}
+  .tile:hover{border-color:#3a4763}
+  .tile.sel{border-color:var(--accent);box-shadow:0 0 0 1px rgba(110,168,255,.35)}
+  .tile.locked{border-color:#e0b055;box-shadow:0 0 0 1px rgba(224,176,85,.3)}
+  .tile canvas{image-rendering:pixelated;display:block}
+  /* one control cluster in one corner - two lone ghost icons in opposite
+     corners read as decoration, not as buttons */
+  .tileTools{position:absolute;top:3px;right:3px;display:flex;gap:3px}
+  .tile .tool{padding:0;width:20px;height:20px;display:flex;align-items:center;
+              justify-content:center;border-radius:4px;background:rgba(10,14,22,.82);
+              border:1px solid var(--line);color:#5d6a84;opacity:0;transition:.12s}
+  .tile:hover .tool{opacity:1}
+  .tile .tool:hover{color:var(--fg);border-color:#3a4763}
+  .tile.locked .lock{opacity:1;color:#e0b055;border-color:#6b5424}
+  .tile.saved .star{opacity:1;color:#6ea8ff;border-color:#2c4877}
+  .library .tile .tool{opacity:1}
+  .tile .tool.danger:hover{color:var(--warn);border-color:#5d4526}
+  .empty{color:var(--dim);font-size:12.5px;padding:18px;max-width:46ch;line-height:1.7}
+
+  .status{padding:6px 16px;border-top:1px solid var(--line);background:var(--panel2);
+          font-size:11px;color:var(--dim);display:flex;gap:16px;flex-wrap:wrap}
+  .icon{flex:none;vertical-align:-3px}
+  .toolbar button{display:inline-flex;align-items:center;gap:7px}
+  /* --- draw-your-own tile --- */
+  /* same box as every other tile: the label floats over the frame instead of
+     adding height to it */
+  .tile.draw{cursor:pointer;border-style:dashed;border-color:#2b3752}
+  .tile.draw:hover{border-color:var(--accent);background:#0b111d}
+  .tile.draw canvas{opacity:.55}
+  .tile.draw .lbl{position:absolute;left:6px;right:6px;bottom:8px;
+                  font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;
+                  color:#6d7c99;text-align:center;pointer-events:none}
+  .tile.draw:hover .lbl{color:var(--accent)}
+
+  /* --- editor modal --- */
+  .drawModal{position:fixed;inset:0;z-index:300;display:none;
+             align-items:center;justify-content:center;background:rgba(4,6,11,.72)}
+  .drawModal.on{display:flex}
+  /* Hard ceiling on the height: the modal has no scroll of its own worth using
+     while you are dragging inside it, so it has to fit the screen. The grid
+     cell size is derived from the same budget in draw.js. */
+  .drawBox{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+           box-shadow:0 24px 70px rgba(0,0,0,.6);max-width:min(96vw,940px);
+           height:min(700px,96vh);display:flex;flex-direction:column;overflow:hidden}
+  .drawHead{display:flex;align-items:center;justify-content:space-between;
+            padding:12px 16px;border-bottom:1px solid var(--line);
+            font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+  .drawX{background:none;border:0;color:var(--dim);font-size:20px;line-height:1;padding:0 4px}
+  .drawX:hover{color:var(--fg);background:none}
+  /* overflow:auto is the safety net, not the plan: cellFor() in draw.js sizes
+     the grid so the body fits. It only engages on a very short window. */
+  .drawBody{display:flex;gap:18px;padding:16px;flex:1;min-height:0;overflow:auto}
+  .drawHead{flex:none}
+  @media (max-width:760px){.drawBody{flex-direction:column}}
+  /* centred, because the modal is a fixed height and the grid rarely fills it
+     exactly - integer cell sizes leave a remainder */
+  .drawLeft{display:flex;flex-direction:column;justify-content:center}
+  .drawLeft canvas{image-rendering:pixelated;display:block;border:1px solid var(--line);
+                   border-radius:6px;cursor:crosshair}
+  .drawHint{margin-top:9px;font-size:10.5px;color:#63708a;max-width:440px;line-height:1.5}
+  .drawRight{display:flex;flex-direction:column;gap:8px;min-width:236px}
+  /* label and control on one row: five stacked pairs wasted half the panel */
+  .drawTools{display:grid;grid-template-columns:auto 1fr;gap:7px 12px;align-items:center}
+  .drawTools>span{font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
+                  color:var(--dim);white-space:nowrap}
+  .drawTools>span em{display:block;font-style:normal;text-transform:none;
+                     letter-spacing:0;font-size:9.5px;color:#54607a;margin-top:1px}
+  .drawSeg{display:flex;gap:4px}
+  .drawSeg button{min-width:28px;padding:4px 7px;font-size:11.5px}
+  .drawSeg.wide{margin-top:2px}
+  .drawSeg.wide button{flex:1;padding:6px 8px}
+  .drawGhostLbl{display:flex;align-items:center;gap:7px;cursor:pointer;
+                font-size:11px;color:var(--dim)}
+  .drawGhostLbl input{accent-color:var(--accent)}
+  .drawSeg button.on{background:#22406e;border-color:#325a96;color:#eaf1ff}
+  /* The preview takes whatever height the column has left over, so a tall grid
+     gets a big preview instead of leaving dead space under the buttons. Its
+     height still comes from the LAYOUT, never from its own contents: the modal
+     must not resize under your cursor as the preview swaps between a
+     placeholder and canvases of different sizes. */
+  .drawPrevWrap{flex:1;display:flex;flex-direction:column;align-items:center;
+                justify-content:center;gap:8px;background:#080b12;
+                border:1px solid var(--line);border-radius:8px;padding:8px;
+                min-height:260px;overflow:hidden}
+  .drawPrev{flex:1;min-height:0;align-self:stretch;position:relative;
+            display:flex;align-items:center;justify-content:center}
+  .drawPrev{color:#4d5972;font-size:11.5px}
+  /* Out of flow on purpose: in a column whose height comes from its contents, a
+     canvas in the flow would size the very box that decides how big the canvas
+     may be. Absolute breaks that loop - the box is sized by the layout, and the
+     preview is measured against it. */
+  .drawPrev canvas{image-rendering:pixelated;display:block;
+                   position:absolute;left:0;right:0;top:0;bottom:0;margin:auto}
+  /* one row, not two: the caption shares a fixed box with the preview, so every
+     line it takes is a line the ship does not get */
+  .drawMeta{display:flex;flex-wrap:wrap;justify-content:center;gap:2px 10px;
+            font-size:10.5px;color:#63708a;font-variant-numeric:tabular-nums;
+            min-height:15px;flex:none}
+  .drawActions{display:flex;gap:8px}
+  .drawActions button{flex:1}
+  .drawActions button:disabled{opacity:.4;cursor:not-allowed}
+
+  .status b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums}
+  .err{color:var(--warn)}
+
+  /* tooltips: our own element, not the browser's - instant, styled, and it
+     survives inside an itch iframe where OS chrome looks out of place */
+  .tip{position:fixed;z-index:200;pointer-events:none;
+       background:#0a0f1a;color:#e9eefb;border:1px solid #33405c;border-radius:6px;
+       padding:6px 9px;font-size:11.5px;line-height:1.35;letter-spacing:.01em;
+       max-width:230px;white-space:normal;
+       box-shadow:0 6px 20px rgba(0,0,0,.55);
+       opacity:0;transform:translateY(3px);transition:opacity .12s ease,transform .12s ease}
+  .tip.on{opacity:1;transform:translateY(0)}
+  .tip::after{content:"";position:absolute;left:50%;margin-left:-5px;
+              border:5px solid transparent;border-top-color:#33405c;bottom:-10px}
+  .tip.below::after{bottom:auto;top:-10px;border-top-color:transparent;border-bottom-color:#33405c}
+
+  .notice{font-size:11.5px;color:var(--dim);opacity:0;transition:opacity .3s;
+          font-variant-numeric:tabular-nums;white-space:nowrap;
+          flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .notice.on{opacity:1}
+  .notice.warn{color:var(--warn)}
+
+  /* reset lives at the foot of the panel, away from the things you click often */
+  .panelFoot{padding:12px 16px 16px;border-top:1px solid var(--line);background:var(--panel);flex:none}
+  .panelFoot button{width:100%;display:inline-flex;align-items:center;justify-content:center;
+                    gap:7px;color:var(--dim);padding:8px 12px}
+  .panelFoot button:hover{color:var(--fg)}
+  .panelFoot button.armed{color:var(--warn);border-color:#5d4526;background:#241a10}
+
+  /* ---------- intro ---------- */
+  #intro{position:fixed;inset:0;z-index:50;background:#05070c;
+         display:flex;align-items:center;justify-content:center;
+         transition:opacity .45s ease}
+  #intro.gone{opacity:0;pointer-events:none}
+  #introCanvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .introUi{position:relative;text-align:center;padding:28px 34px;
+           background:rgba(5,7,12,.55);backdrop-filter:blur(2px);
+           border:1px solid rgba(110,168,255,.16);border-radius:14px}
+  .introUi h1{margin:0 0 14px;display:flex;justify-content:center;
+              filter:drop-shadow(0 0 16px rgba(110,168,255,.5))}
+  .introUi .tagline{display:flex;justify-content:center;margin:0 0 24px;opacity:.72}
+  /* attract-mode blink: hard on/off, no fade - a cabinet does not tween */
+  @keyframes arcadeBlink{0%,54%{opacity:1}55%,100%{opacity:0}}
+  .introCta{display:flex;justify-content:center;animation:arcadeBlink 1.06s infinite;
+            filter:drop-shadow(0 0 10px rgba(110,168,255,.55))}
+  #intro{cursor:pointer}
+  .introUi{pointer-events:none}   /* the whole screen is the button */
+</style>
+</head>
+<body>
+<div id="intro">
+  <canvas id="introCanvas"></canvas>
+  <div class="introUi">
+    <h1 id="introTitle"></h1>
+    <div class="tagline" id="introTag"></div>
+    <div class="introCta" id="introCta"></div>
+  </div>
+</div>
+
+<div id="app">
+  <aside>
+    <header id="brand"></header>
+    <div id="panel"></div>
+    <div class="panelFoot">
+      <button id="resetAll"></button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="toolbar">
+      <div class="seedbox">seed <input type="text" id="seed" value="1337"></div>
+      <button id="reroll">Randomize</button>
+      <span class="notice" id="notice"></span>
+      <div class="sp"></div>
+      <button id="showLib">Saved</button>
+      <button id="expPng">Export PNG strip</button>
+      <button id="expMounts">Mounts</button>
+      <button class="primary" id="expSheet">Export fleet sheet</button>
+    </div>
+
+    <div class="stage">
+      <div class="hero">
+        <canvas id="hero"></canvas>
+        <div class="meta" id="heroMeta"></div>
+      </div>
+      <div class="gallery" id="gallery"></div>
+      <div class="gallery library" id="library" hidden></div>
+    </div>
+
+  </main>
+</div>
+
+<script src="lab/shape.js"></script>
+<script src="lab/shading.js"></script>
+<script src="lab/palette.js"></script>
+<script src="lab/mounts.js"></script>
+<script src="lab/compose.js"></script>
+<script src="lab/bank.js"></script>
+<script src="lab/families.js"></script>
+<script src="lab/controls.js"></script>
+<script src="lab/sprite.js"></script>
+<script src="app/storage.js"></script>
+<script src="app/icons.js"></script>
+<script src="app/tooltip.js"></script>
+<script src="app/draw.js"></script>
+<script src="app/pixelfont.js"></script>
+<script src="app/app.js"></script>
+<script src="app/intro.js"></script>
+</body>
+</html>

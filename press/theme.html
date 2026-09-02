@@ -1,0 +1,58 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="_base.css">
+<style>
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:4px}
+.sw{border:1px solid #212a3d;border-radius:10px;overflow:hidden;background:#0b0e16}
+.chip{height:74px}
+.meta{padding:10px 12px}
+.role{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8794ad;font-weight:700}
+.hex{font-size:15px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#e2e8f6;margin-top:3px}
+.ct{font-size:10.5px;color:#63708a;margin-top:4px;font-variant-numeric:tabular-nums}
+.ok{color:#8fd18a}
+.demo{margin-top:26px;border:1px solid #212a3d;border-radius:10px;overflow:hidden}
+.demoBar{background:#111725;padding:12px 18px;border-bottom:1px solid #212a3d;
+         display:flex;align-items:center;gap:14px}
+.demoBar .name{color:#e2e8f6;font-weight:600;font-size:14px}
+.demoBar a{color:#6ea8ff;text-decoration:none;font-size:12.5px}
+.demoBody{background:#0b0e14;padding:18px 18px 22px}
+.demoBody p{margin:0 0 14px;color:#8794ad;font-size:12.5px;max-width:74ch}
+.btn{display:inline-block;background:#22406e;color:#eaf1ff;border-radius:7px;
+     padding:9px 18px;font-size:13px;font-weight:600}
+.btn2{display:inline-block;background:#1c2537;color:#e2e8f6;border:1px solid #212a3d;
+      border-radius:7px;padding:8px 16px;font-size:12.5px;margin-left:8px}
+</style>
+<body><div class="wrap">
+<div class="h" id="t"></div>
+<div class="sub">The page palette is the tool's own palette, so the itch page and the game read as one thing. Contrast measured against the page background.</div>
+<div class="grid" id="g"></div>
+<div class="demo">
+  <div class="demoBar"><span class="name">Pixelship</span><a href="#">devlog</a><a href="#">comments</a></div>
+  <div class="demoBody">
+    <p>Procedural pixel-art spaceships grown from a cellular automaton. Seeded, size-independent,
+       animated, and it exports sprite sheets you can drop into a game.</p>
+    <span class="btn">Run game</span><span class="btn2">Download</span>
+  </div>
+</div>
+</div>
+<script src="../app/pixelfont.js"></script>
+<script>
+var SW=[
+ ["Background","#0b0e14","page background"],
+ ["Background 2","#111725","panels, header"],
+ ["Text","#e2e8f6","15.7 : 1",true],
+ ["Secondary text","#8794ad","6.3 : 1",true],
+ ["Link","#6ea8ff","8.0 : 1",true],
+ ["Button bg","#22406e","with #eaf1ff text: 9.1 : 1",true],
+ ["Button text","#eaf1ff","",false],
+ ["Border","#212a3d","hairlines, dividers"]
+];
+var g=document.getElementById("g");
+SW.forEach(function(s){
+  var d=document.createElement("div"); d.className="sw";
+  d.innerHTML='<div class="chip" style="background:'+s[1]+'"></div>'+
+    '<div class="meta"><div class="role">'+s[0]+'</div><div class="hex">'+s[1].toUpperCase()+'</div>'+
+    '<div class="ct'+(s[3]?' ok':'')+'">'+(s[2]||'&nbsp;')+'</div></div>';
+  g.appendChild(d);
+});
+document.getElementById("t").appendChild(PixelFont.render("ITCH PAGE PALETTE",{scale:4,color:"#eaf1ff"}));
+</script>
+</body>

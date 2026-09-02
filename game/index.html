@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixelship sprites demonstration</title>
+<style>
+  html,body{height:100%}
+  body{margin:0;background:#05070d;color:#8794ad;overflow:hidden;
+       font:12px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+       display:flex;align-items:center;justify-content:center}
+  #stage{position:relative}
+  #screen{image-rendering:pixelated;display:block;background:#05070d;
+          border:1px solid #212a3d;box-shadow:0 0 48px rgba(60,110,220,.14)}
+  #boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+        letter-spacing:.14em;text-transform:uppercase;font-size:11px;color:#63708a}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="screen" width="320" height="400"></canvas>
+  <div id="boot">baking sprites...</div>
+</div>
+
+<!-- generator (relative to ../lab), then the shared renderer, then the font -->
+<script src="../lab/shape.js"></script>
+<script src="../lab/shading.js"></script>
+<script src="../lab/palette.js"></script>
+<script src="../lab/mounts.js"></script>
+<script src="../lab/compose.js"></script>
+<script src="../lab/bank.js"></script>
+<script src="../lab/families.js"></script>
+<script src="../lab/sprite.js"></script>
+<script src="../app/pixelfont.js"></script>
+<script src="audio.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

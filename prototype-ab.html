@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Ship - porównanie A/B</title>
+<style>
+  :root{
+    --bg:#0b0e14; --panel:#141925; --line:#232b3d; --fg:#dfe6f5; --dim:#8b97ae;
+    --a:#ff9f5a; --b:#5ad1ff; --c:#b48cff;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}
+  header{padding:18px 22px 12px;border-bottom:1px solid var(--line)}
+  h1{margin:0 0 4px;font-size:17px;letter-spacing:.2px}
+  header p{margin:0;color:var(--dim);font-size:12.5px}
+
+  .controls{display:flex;flex-wrap:wrap;gap:18px;align-items:center;
+            padding:12px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .ctl{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--dim)}
+  .ctl b{color:var(--fg);font-weight:600;font-variant-numeric:tabular-nums;min-width:34px;display:inline-block}
+  input[type=range]{width:130px;accent-color:#6ea8ff}
+  input[type=text]{background:#0b0e14;border:1px solid var(--line);color:var(--fg);
+                   border-radius:6px;padding:5px 8px;width:110px;font:inherit;font-size:12.5px}
+  button{background:#1e2739;border:1px solid var(--line);color:var(--fg);border-radius:6px;
+         padding:6px 12px;font:inherit;font-size:12.5px;cursor:pointer}
+  button:hover{background:#27324a}
+  label.chk{display:flex;align-items:center;gap:6px;cursor:pointer;color:var(--dim)}
+
+  main{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line);min-height:0}
+  @media (max-width:1200px){main{grid-template-columns:1fr 1fr}}
+  @media (max-width:800px){main{grid-template-columns:1fr}}
+  section{background:var(--bg);padding:16px 20px 40px}
+  h2{margin:0 0 2px;font-size:14px;display:flex;align-items:center;gap:8px}
+  .tag{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;
+       border-radius:99px;font-weight:700}
+  .tagA{background:rgba(255,159,90,.14);color:var(--a);border:1px solid rgba(255,159,90,.3)}
+  .tagB{background:rgba(90,209,255,.14);color:var(--b);border:1px solid rgba(90,209,255,.3)}
+  .tagC{background:rgba(180,140,255,.14);color:var(--c);border:1px solid rgba(180,140,255,.32)}
+  section p.desc{margin:0 0 14px;color:var(--dim);font-size:12.5px;max-width:52ch}
+
+  .grid{display:flex;flex-wrap:wrap;gap:10px}
+  .cell{background:#080a10;border:1px solid var(--line);border-radius:8px;
+        display:flex;align-items:center;justify-content:center;cursor:pointer;
+        position:relative;overflow:hidden}
+  .cell:hover{border-color:#3a4763}
+  .cell canvas{image-rendering:pixelated;display:block}
+  .cell::after{content:"↻";position:absolute;top:3px;right:5px;font-size:11px;color:#3a4763;opacity:0;transition:.12s}
+  .cell:hover::after{opacity:1}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Proceduralny statek 2D - porównanie metod generowania kształtu</h1>
+  <p>Ten sam seed i ta sama paleta po obu stronach. Kliknij statek, żeby przelosować tylko jego.</p>
+</header>
+
+<div class="controls">
+  <div class="ctl">seed <input type="text" id="seed" value="1337"><button id="reroll">losuj</button></div>
+  <div class="ctl">rozmiar <input type="range" id="size" min="16" max="96" step="1" value="40"><b id="sizeV">40</b></div>
+  <div class="ctl">ciąg <input type="range" id="thr" min="0" max="100" step="1" value="75"><b id="thrV">75%</b></div>
+  <label class="chk"><input type="checkbox" id="fire" checked> strzały</label>
+  <label class="chk"><input type="checkbox" id="lights" checked> światła</label>
+</div>
+
+<main>
+  <section>
+    <h2><span class="tag tagA">A</span> Cellular automata + symetria</h2>
+    <p class="desc">Losowy szum na siatce, kilka iteracji wygładzania, wymuszona symetria pionowa,
+       największa spójna bryła. Punkty montażowe (dysze, działka, światła) <em>wykrywane</em> z kształtu.</p>
+    <div class="grid" id="gridA"></div>
+  </section>
+  <section>
+    <h2><span class="tag tagB">B</span> Konstrukcja z części (ludzkie)</h2>
+    <p class="desc">Profil kadłuba od dziobu do rufy, doklejane skrzydła, potem moduły: kokpit, dysze,
+       działka, pasy. Punkty montażowe <em>znane z konstrukcji</em>.</p>
+    <div class="grid" id="gridB"></div>
+  </section>
+  <section>
+    <h2><span class="tag tagC">C</span> Obce cywilizacje</h2>
+    <p class="desc">Inne reguły budowy, nie inna losowość: symetria promienista, pustka w sylwetce,
+       niepołączone elementy, brak kokpitu i skrzydeł, napęd jako poświata zamiast ognia.
+       Cztery archetypy: <em>bio, kryształ, pierścień, promienisty</em>.</p>
+    <div class="grid" id="gridC"></div>
+  </section>
+</main>
+
+<script>
+/* ═══════════════════════ wspólny rdzeń ═══════════════════════ */
+
+const SHIPS_PER_METHOD = 6;
+
+function mulberry32(a){
+  return function(){
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+const rr = (r,a,b) => a + (b-a)*r();
+const ri = (r,a,b) => Math.floor(a + (b-a+1)*r());
+const pick = (r,arr) => arr[Math.floor(r()*arr.length)];
+const clamp = (v,a,b) => v<a?a:v>b?b:v;
+const smooth = t => t*t*(3-2*t);
+
+/* materiały w siatce */
+const EMPTY=0, HULL=1, LIGHT=2, DARK=3, OUTLINE=4, COCKPIT=5, ACCENT=6, NOZZLE=7, GUN=8, LAMP=9,
+      CORE=10, SEAM=11, EYE=12;
+
+function hsl2rgb(h,s,l){
+  h=((h%360)+360)%360/360;
+  const f=(n)=>{const k=(n+h*12)%12; const a=s*Math.min(l,1-l);
+    return Math.round(255*(l - a*Math.max(-1,Math.min(k-3,Math.min(9-k,1)))));};
+  return [f(0),f(8),f(4)];
+}
+
+/* alien=true przesuwa paletę w stronę biologiczno-egzotyczną: wyższe nasycenie,
+   chłodne cienie, świecące akcenty. Ludzka paleta zostaje wojskowo-stonowana. */
+function makePalette(r, alien=false){
+  const h = r()*360;
+  const s = alien ? rr(r,.22,.55) : rr(r,.05,.30);
+  const accH = (h + rr(r,140,220)) % 360;
+  const cockH = (h + 195) % 360;
+  const shadowShift = alien ? -32 : -10;   /* cienie odchylone w chłód */
+  const pal = [];
+  pal[EMPTY]   = null;
+  pal[HULL]    = hsl2rgb(h, s, alien ? .44 : .50);
+  pal[LIGHT]   = hsl2rgb(h + (alien?14:5), s*.75, alien ? .66 : .70);
+  pal[DARK]    = hsl2rgb(h + shadowShift, s*(alien?1.15:1), alien ? .24 : .31);
+  pal[OUTLINE] = hsl2rgb(h + shadowShift, Math.min(1,s*1.6), .07);
+  pal[COCKPIT] = hsl2rgb(cockH, .62, .60);
+  pal[ACCENT]  = hsl2rgb(accH, alien ? .85 : .70, .54);
+  pal[NOZZLE]  = hsl2rgb(h + shadowShift, s*.5, .18);
+  pal[GUN]     = hsl2rgb(h + shadowShift, s*.6, .16);
+  pal[LAMP]    = hsl2rgb(accH, .85, .62);
+  pal[CORE]    = hsl2rgb(accH, .95, .66);
+  pal[SEAM]    = hsl2rgb(accH, .90, .52);
+  pal[EYE]     = hsl2rgb((accH + 30) % 360, 1.0, .70);
+  pal.flame    = hsl2rgb((accH + rr(r,-25,25)) % 360, .9, .55);
+  pal.plume    = hsl2rgb(accH, .95, .60);
+  pal.hueBase  = h;
+  return pal;
+}
+
+/* ---- operacje na siatce, wspólne dla obu metod ---- */
+
+function mirrorLeftToRight(g,W,H){
+  const half = Math.floor(W/2);
+  for(let y=0;y<H;y++)
+    for(let x=0;x<half;x++)
+      g[y*W + (W-1-x)] = g[y*W+x];
+}
+
+/* zostaw tylko największą spójną bryłę (4-sąsiedztwo) */
+function keepLargestBlob(g,W,H){
+  const lab = new Int32Array(W*H).fill(-1);
+  const stack = [];
+  let best = -1, bestSize = 0;
+  for(let i=0;i<W*H;i++){
+    if(!g[i] || lab[i]>=0) continue;
+    const id = i; let size = 0;
+    lab[i]=id; stack.push(i);
+    while(stack.length){
+      const p = stack.pop(); size++;
+      const x = p%W, y = (p-x)/W;
+      if(x>0   && g[p-1] && lab[p-1]<0){ lab[p-1]=id; stack.push(p-1); }
+      if(x<W-1 && g[p+1] && lab[p+1]<0){ lab[p+1]=id; stack.push(p+1); }
+      if(y>0   && g[p-W] && lab[p-W]<0){ lab[p-W]=id; stack.push(p-W); }
+      if(y<H-1 && g[p+W] && lab[p+W]<0){ lab[p+W]=id; stack.push(p+W); }
+    }
+    if(size>bestSize){ bestSize=size; best=id; }
+  }
+  for(let i=0;i<W*H;i++) if(g[i] && lab[i]!==best) g[i]=EMPTY;
+  return bestSize;
+}
+
+/* ---- prymitywy rysunkowe: wielokąt, elipsa, linia, krzywa ---- */
+
+function fillPoly(g,W,H,pts,mat){
+  let ymin=1e9, ymax=-1e9;
+  for(const p of pts){ if(p[1]<ymin)ymin=p[1]; if(p[1]>ymax)ymax=p[1]; }
+  ymin=Math.max(0,Math.floor(ymin)); ymax=Math.min(H-1,Math.ceil(ymax));
+  for(let y=ymin;y<=ymax;y++){
+    const xs=[];
+    for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+      const [xi,yi]=pts[i], [xj,yj]=pts[j];
+      if((yi<=y && yj>y) || (yj<=y && yi>y)) xs.push(xi + (y-yi)/(yj-yi)*(xj-xi));
+    }
+    xs.sort((a,b)=>a-b);
+    for(let k=0;k+1<xs.length;k+=2)
+      for(let x=Math.round(xs[k]); x<=Math.round(xs[k+1]); x++)
+        if(x>=0 && x<W) g[y*W+x]=mat;
+  }
+}
+
+/* pred(currentMaterial) decyduje, czy piksel wolno pomalować */
+function fillEllipse(g,W,H,cx,cy,rx,ry,mat,pred){
+  for(let y=Math.floor(cy-ry); y<=Math.ceil(cy+ry); y++)
+    for(let x=Math.floor(cx-rx); x<=Math.ceil(cx+rx); x++){
+      if(x<0||y<0||x>=W||y>=H) continue;
+      const dx=(x-cx)/(rx+.35), dy=(y-cy)/(ry+.35);
+      if(dx*dx+dy*dy>1) continue;
+      const i=y*W+x;
+      if(pred && !pred(g[i])) continue;
+      g[i]=mat;
+    }
+}
+
+function strokeLine(g,W,H,x0,y0,x1,y1,th,mat){
+  const steps = Math.ceil(Math.max(Math.abs(x1-x0), Math.abs(y1-y0))) + 1;
+  const rad = (th-1)/2;
+  const k = Math.ceil(rad);
+  for(let s=0;s<=steps;s++){
+    const t=s/steps, x=x0+(x1-x0)*t, y=y0+(y1-y0)*t;
+    for(let dy=-k;dy<=k;dy++) for(let dx=-k;dx<=k;dx++){
+      if(dx*dx+dy*dy > rad*rad+0.5) continue;
+      const X=Math.round(x+dx), Y=Math.round(y+dy);
+      if(X<0||Y<0||X>=W||Y>=H) continue;
+      g[Y*W+X]=mat;
+    }
+  }
+}
+
+function strokeCurve(g,W,H,p0,p1,p2,th,mat){
+  const n = Math.ceil(Math.hypot(p2[0]-p0[0], p2[1]-p0[1])) * 2 + 4;
+  let prev = p0;
+  for(let i=1;i<=n;i++){
+    const t=i/n, u=1-t;
+    const x = u*u*p0[0] + 2*u*t*p1[0] + t*t*p2[0];
+    const y = u*u*p0[1] + 2*u*t*p1[1] + t*t*p2[1];
+    strokeLine(g,W,H,prev[0],prev[1],x,y,th,mat);
+    prev=[x,y];
+  }
+}
+
+/* ---- składowe spójne: obce statki mogą mieć części zawieszone obok kadłuba ---- */
+
+function components(g,W,H,solid){
+  const seen = new Uint8Array(W*H);
+  const out = [];
+  const stack = [];
+  for(let i=0;i<W*H;i++){
+    if(seen[i] || !solid(g[i])) continue;
+    const comp=[]; seen[i]=1; stack.push(i);
+    while(stack.length){
+      const p=stack.pop(); comp.push(p);
+      const x=p%W, y=(p-x)/W;
+      const push=(q)=>{ if(!seen[q] && solid(g[q])){ seen[q]=1; stack.push(q); } };
+      if(x>0)   push(p-1);
+      if(x<W-1) push(p+1);
+      if(y>0)   push(p-W);
+      if(y<H-1) push(p+W);
+    }
+    out.push(comp);
+  }
+  return out;
+}
+
+/* największa składowa zostaje kadłubem; reszta staje się "floaterami",
+   które renderer rysuje z własnym, zapętlonym drgnieniem. Okruchy giną. */
+function splitFloaters(g,W,H,minSize,r){
+  const comps = components(g,W,H, m => m!==EMPTY);
+  if(comps.length<2) return [];
+  comps.sort((a,b)=>b.length-a.length);
+  const floaters=[];
+  for(let c=1;c<comps.length;c++){
+    const comp = comps[c];
+    if(comp.length < minSize){ for(const p of comp) g[p]=EMPTY; continue; }
+    const cells = comp.map(p=>({ x:p%W, y:Math.floor(p/W), m:g[p] }));
+    for(const p of comp) g[p]=EMPTY;
+    floaters.push({ cells, amp: 1, phase: rr(r,0,Math.PI*2), speed: rr(r,.6,1.4) });
+  }
+  return floaters;
+}
+
+/* cieniowanie: górne krawędzie jasne, dolne ciemne; grzbiet na osi tylko dla ludzkich kadłubów
+   (centralny połysk to bardzo "samolotowy" sygnał, obce kształty go nie dostają) */
+function applyShading(g,W,H,opts={}){
+  const src = Uint8Array.from(g);
+  const cx = (W-1)/2;
+  const ridge = opts.ridge===false ? -1 : Math.min(1.2, W*0.045);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const i = y*W+x;
+    if(src[i] !== HULL) continue;
+    const up   = y>0   ? src[i-W] : EMPTY;
+    const down = y<H-1 ? src[i+W] : EMPTY;
+    let m = HULL;
+    if(Math.abs(x-cx) <= ridge) m = LIGHT;
+    if(up === EMPTY) m = LIGHT;
+    if(down === EMPTY) m = DARK;
+    g[i] = m;
+  }
+}
+
+/* kontur 1px wokół całej bryły */
+function applyOutline(g,W,H){
+  const src = Uint8Array.from(g);
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const i = y*W+x;
+    if(src[i] !== EMPTY) continue;
+    const n = (x>0   && src[i-1]) || (x<W-1 && src[i+1]) ||
+              (y>0   && src[i-W]) || (y<H-1 && src[i+W]);
+    if(n) g[i] = OUTLINE;
+  }
+}
+
+/* mapa "najniższy wypełniony piksel w kolumnie" */
+function bottomProfile(g,W,H){
+  const b = new Int32Array(W).fill(-1);
+  for(let x=0;x<W;x++)
+    for(let y=H-1;y>=0;y--) if(g[y*W+x]){ b[x]=y; break; }
+  return b;
+}
+function topProfile(g,W,H){
+  const t = new Int32Array(W).fill(-1);
+  for(let x=0;x<W;x++)
+    for(let y=0;y<H;y++) if(g[y*W+x]){ t[x]=y; break; }
+  return t;
+}
+
+/* owalny kokpit na osi; zmniejsza się i zjeżdża w dół aż zmieści się w całości na kadłubie */
+function stampCockpit(g,W,H,cyRatio,rxPx,r){
+  const cx = (W-1)/2;
+  const ratio = rr(r,1.2,1.9);
+  const rx0 = Math.max(1, Math.min(Math.round(rxPx), Math.round(W*0.10)));
+
+  const cells = (cx,cy,rx,ry) => {
+    const out = [];
+    for(let y=cy-ry;y<=cy+ry;y++) for(let x=Math.floor(cx-rx);x<=Math.ceil(cx+rx);x++){
+      if(x<0||y<0||x>=W||y>=H) return null;
+      const dx=(x-cx)/(rx+.3), dy=(y-cy)/(ry+.3);
+      if(dx*dx+dy*dy<=1) out.push(y*W+x);
+    }
+    return out;
+  };
+
+  const maxSlide = Math.max(2, Math.round(H*0.2));
+  for(let rx=rx0; rx>=1; rx--){
+    const ry = Math.max(1, Math.round(rx*ratio));
+    for(let slide=0; slide<=maxSlide; slide++){
+      const c = cells(cx, Math.round(H*cyRatio)+slide, rx, ry);
+      if(!c || c.some(i => g[i]===EMPTY)) continue;
+      for(const i of c) g[i]=COCKPIT;
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ═══════════════════════ METODA A - cellular automata ═══════════════════════ */
+
+function generateA(r, W, H, pal){
+  const g = new Uint8Array(W*H);
+  const cx = (W-1)/2;
+  const rx = W*rr(r,.30,.46);
+  const ry = H*rr(r,.36,.47);
+  const cy = H*rr(r,.46,.54);
+  const bias = rr(r,.80,1.00);
+
+  /* zasiew z eliptycznym prawdopodobieństwem */
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+    const dx=(x-cx)/rx, dy=(y-cy)/ry;
+    const d = Math.sqrt(dx*dx+dy*dy);
+    const p = bias - d*0.78;
+    g[y*W+x] = r() < p ? HULL : EMPTY;
+  }
+  mirrorLeftToRight(g,W,H);
+
+  /* wygładzanie */
+  const iters = ri(r,4,6);
+  for(let it=0; it<iters; it++){
+    const src = Uint8Array.from(g);
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      let n=0;
+      for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){
+        if(!dx && !dy) continue;
+        const nx=x+dx, ny=y+dy;
+        if(nx<0||ny<0||nx>=W||ny>=H) continue;
+        if(src[ny*W+nx]) n++;
+      }
+      const c = src[y*W+x];
+      g[y*W+x] = n>=5 ? HULL : (n<=2 ? EMPTY : c);
+    }
+    mirrorLeftToRight(g,W,H);
+  }
+  keepLargestBlob(g,W,H);
+
+  const bot = bottomProfile(g,W,H);
+  const top = topProfile(g,W,H);
+
+  /* dysze: grupy kolumn kończących się najniżej */
+  let maxY = -1;
+  for(let x=0;x<W;x++) if(bot[x]>maxY) maxY=bot[x];
+  const tol = Math.max(1, Math.round(H*0.05));
+  const groups=[]; let cur=null;
+  for(let x=0;x<W;x++){
+    if(bot[x] >= maxY-tol){ cur ? cur.x1=x : cur={x0:x,x1:x}; }
+    else if(cur){ groups.push(cur); cur=null; }
+  }
+  if(cur) groups.push(cur);
+  groups.sort((a,b)=>(b.x1-b.x0)-(a.x1-a.x0));
+
+  const maxNozW = Math.max(1, Math.round(W*0.14));
+  const engines = groups.slice(0,3).map(gr=>{
+    const c = (gr.x0+gr.x1)/2;
+    const w = Math.min(gr.x1-gr.x0+1, maxNozW);
+    return { x:c, y:Math.max(bot[Math.round(c)], maxY-tol), w };
+  }).filter(e=>e.y>=0);
+
+  /* wytłocz dysze w metalu */
+  for(const e of engines){
+    const half=(e.w-1)/2;
+    for(let x=Math.round(e.x-half); x<=Math.round(e.x+half); x++){
+      for(let dy=0; dy<Math.max(1,Math.round(H*0.04)); dy++){
+        const y=e.y-dy;
+        if(x<0||x>=W||y<0) continue;
+        if(g[y*W+x]) g[y*W+x]=NOZZLE;
+      }
+    }
+  }
+
+  /* działka: najbardziej wysunięte kolumny (końce skrzydeł) */
+  let extreme=-1, exX=-1;
+  for(let x=0;x<W;x++) if(top[x]>=0 && Math.abs(x-cx)>extreme){ extreme=Math.abs(x-cx); exX=x; }
+  const guns=[];
+  if(exX>=0 && extreme > W*0.12){
+    for(const gx of [exX, Math.round(2*cx-exX)]){
+      const gy = top[clamp(Math.round(gx),0,W-1)];
+      if(gy<0) continue;
+      const len = Math.max(2, Math.round(H*0.07));
+      for(let d=1; d<=len; d++){
+        const y=gy-d; if(y<0) break;
+        g[y*W+clamp(Math.round(gx),0,W-1)] = GUN;
+      }
+      guns.push({ x:gx, y:Math.max(0,gy-len) });
+    }
+  }
+
+  /* kokpit + lampki */
+  /* promień kokpitu = ułamek połowy szerokości kadłuba w tym miejscu */
+  const cockY = rr(r,.26,.40);
+  const rowY = clamp(Math.round(H*cockY), 0, H-1);
+  let runHalf = 0;
+  for(let x=Math.round(cx); x<W && g[rowY*W+x]; x++) runHalf++;
+  stampCockpit(g,W,H, cockY, Math.max(1, runHalf*rr(r,.35,.6)), r);
+  const lamps=[];
+  const midY = Math.round(H*rr(r,.5,.68));
+  for(let x=0;x<W;x++){
+    if(g[midY*W+x]){ lamps.push({x, y:midY, ph:0}); break; }
+  }
+  for(let x=W-1;x>=0;x--){
+    if(g[midY*W+x]){ lamps.push({x, y:midY, ph:0}); break; }
+  }
+  for(const l of lamps) if(g[l.y*W+l.x]) g[l.y*W+l.x]=LAMP;
+
+  applyShading(g,W,H);
+  applyOutline(g,W,H);
+  return { g, W, H, pal, engines, guns, lamps };
+}
+
+/* ═══════════════════════ METODA B - konstrukcja z części ═══════════════════════ */
+
+function generateB(r, W, H, pal){
+  const g = new Uint8Array(W*H);
+  const cx = (W-1)/2;
+
+  const yTop = Math.round(H*rr(r,.05,.10));
+  const yBot = Math.round(H*rr(r,.88,.95));
+  const len  = yBot - yTop;
+  /* postura: przechwytywacz (wąski, duże skrzydła) ... krążownik (gruby, małe skrzydła) */
+  const cls = pick(r, ['int','int','fig','fig','fig','cru']);
+  const maxHalf = W*0.5*(cls==='int' ? rr(r,.10,.15)
+                       : cls==='fig' ? rr(r,.15,.23)
+                                     : rr(r,.24,.34));
+  const spanMul = cls==='int' ? rr(r,1.0,1.35) : cls==='fig' ? rr(r,.8,1.1) : rr(r,.45,.75);
+
+  /* profil kadłuba: interpolowane punkty kluczowe (t, względna szerokość) */
+  const kp = [
+    [0.00, rr(r,.05,.14)],
+    [rr(r,.10,.26), rr(r,.28,.55)],
+    [rr(r,.42,.58), 1.00],
+    [rr(r,.72,.84), rr(r,.55,.95)],
+    [1.00, rr(r,.30,.75)],
+  ].sort((a,b)=>a[0]-b[0]);
+
+  const halfAt = (y) => {
+    const t = clamp((y-yTop)/len, 0, 1);
+    for(let i=0;i<kp.length-1;i++){
+      if(t>=kp[i][0] && t<=kp[i+1][0]){
+        const u = (t-kp[i][0]) / Math.max(1e-6, kp[i+1][0]-kp[i][0]);
+        return maxHalf * (kp[i][1] + (kp[i+1][1]-kp[i][1])*smooth(u));
+      }
+    }
+    return maxHalf*kp[kp.length-1][1];
+  };
+
+  const fillRow = (y, from, to, mat) => {
+    if(y<0||y>=H) return;
+    for(let x=Math.round(from); x<=Math.round(to); x++)
+      if(x>=0 && x<W) g[y*W+x] = mat;
+  };
+
+  for(let y=yTop; y<=yBot; y++){
+    const h = Math.max(0.5, halfAt(y));
+    fillRow(y, cx-h, cx+h, HULL);
+  }
+
+  /* skrzydła: 1-2 pary, profil rozpiętości sterowany typem */
+  const wingKinds = ['delta','swept','straight','forked'];
+  const pairs = ri(r,1,2);
+  const wings = [];
+  for(let p=0;p<pairs;p++){
+    const kind = pick(r, wingKinds);
+    const t0 = rr(r, p===0 ? .28 : .55, p===0 ? .55 : .78);
+    const t1 = clamp(t0 + rr(r,.18,.42), 0, 1.0);
+    const y0 = Math.round(yTop + len*t0);
+    const y1 = Math.round(yTop + len*t1);
+    const span = W*0.5*rr(r,.26,.52)*spanMul;
+    wings.push({y0,y1,span,kind});
+
+    for(let y=y0; y<=y1; y++){
+      const u = (y-y0)/Math.max(1,(y1-y0));
+      let f;
+      if(kind==='delta')     f = smooth(u);
+      else if(kind==='swept')f = smooth(1-u);
+      else if(kind==='forked')f = smooth(Math.min(1, u*1.6)) * (u>0.75 ? 0.55 : 1);
+      else                   f = 0.6 + 0.4*smooth(u);
+      const inner = halfAt(y) - 0.5;
+      const outer = inner + span*f;
+      fillRow(y, cx+inner, cx+outer, HULL);
+      fillRow(y, cx-outer, cx-inner, HULL);
+    }
+  }
+
+  keepLargestBlob(g,W,H);
+
+  /* dysze: najpierw liczba, potem szerokość dopasowana do rufy z 1px przerwą */
+  const bot = bottomProfile(g,W,H);
+  const tailW = Math.max(1, Math.round(halfAt(yBot)*2));
+  const GAP = 1;
+  let count = pick(r,[1,2,2,3,3]);
+  while(count > 1 && Math.floor((tailW - (count-1)*GAP)/count) < 1) count--;
+  const nozW = count===1
+    ? Math.max(1, Math.round(tailW*rr(r,.55,1.0)))
+    : Math.max(1, Math.floor((tailW - (count-1)*GAP)/count));
+  const totalW = count*nozW + (count-1)*GAP;
+  const left0 = Math.round(cx - (totalW-1)/2);
+  const depth = Math.max(1, Math.round(H*0.05));
+  const engines = [];
+  for(let k=0;k<count;k++){
+    const l = left0 + k*(nozW+GAP);
+    const mid = l + (nozW-1)/2;
+    const ey = bot[clamp(Math.round(mid),0,W-1)];
+    if(ey < 0) continue;
+    engines.push({ x:mid, y:ey, w:nozW });
+    for(let x=l; x<l+nozW; x++)
+      for(let dy=0; dy<depth; dy++){
+        const y = ey-dy;
+        if(x<0||x>=W||y<0) continue;
+        if(g[y*W+x]) g[y*W+x]=NOZZLE;   /* nigdy nie maluje poza kadłubem */
+      }
+  }
+
+  /* działka: na czubkach skrzydeł albo przy kadłubie */
+  const guns = [];
+  if(wings.length && r() < 0.85){
+    const w = wings[ri(r,0,wings.length-1)];
+    const gy0 = w.kind==='swept' ? w.y0 : Math.round((w.y0+w.y1)/2);
+    const top = topProfile(g,W,H);
+    /* znajdź skrajną kolumnę skrzydła w okolicy gy0 */
+    let gx = -1;
+    for(let x=W-1;x>=Math.ceil(cx);x--){ if(g[gy0*W+x]){ gx=x; break; } }
+    if(gx>0){
+      const inset = Math.max(0, Math.round(W*0.02));
+      for(const px of [gx-inset, Math.round(2*cx-(gx-inset))]){
+        const X = clamp(Math.round(px),0,W-1);
+        const ty = top[X] >= 0 ? top[X] : gy0;
+        const glen = Math.max(2, Math.round(H*rr(r,.06,.11)));
+        for(let d=1; d<=glen; d++){
+          const y = ty-d; if(y<0) break;
+          g[y*W+X] = GUN;
+        }
+        guns.push({ x:X, y:Math.max(0,ty-glen) });
+      }
+    }
+  }
+
+  /* kokpit - skalowany do szerokości kadłuba, nie sprite'a */
+  const cockT = rr(r,.24,.40);
+  stampCockpit(g,W,H, (yTop + len*cockT)/H, Math.max(1, halfAt(yTop+len*cockT)*rr(r,.4,.62)), r);
+
+  /* pasy akcentu na kadłubie */
+  const stripes = ri(r,0,2);
+  for(let s=0;s<stripes;s++){
+    const y = Math.round(yTop + len*rr(r,.45,.8));
+    if(y<0||y>=H) continue;
+    const h = halfAt(y);
+    for(let x=Math.round(cx-h*0.6); x<=Math.round(cx+h*0.6); x++)
+      if(x>=0 && x<W && g[y*W+x]===HULL) g[y*W+x]=ACCENT;
+  }
+
+  /* lampki na czubkach skrzydeł */
+  const lamps = [];
+  if(wings.length){
+    const w = wings[0];
+    const ly = clamp(Math.round((w.y0+w.y1)/2), 0, H-1);
+    for(let x=W-1;x>=Math.ceil(cx);x--){
+      if(g[ly*W+x]){
+        lamps.push({x, y:ly, ph:0});
+        lamps.push({x:clamp(Math.round(2*cx-x),0,W-1), y:ly, ph:Math.PI});
+        break;
+      }
+    }
+    for(const l of lamps) if(g[l.y*W+l.x]) g[l.y*W+l.x]=LAMP;
+  }
+
+  applyShading(g,W,H);
+  applyOutline(g,W,H);
+  return { g, W, H, pal, engines, guns, lamps };
+}
+
+/* ═══════════════════════ METODA C - obce cywilizacje ═══════════════════════ */
+/* Archetyp rysuje kształt i zwraca SPECYFIKACJĘ punktów montażowych we współrzędnych
+   względem osi (dx). Pozycje pionowe i grawerunek liczy wrapper, już po wymuszeniu
+   symetrii - dzięki temu żaden archetyp nie musi się przejmować zaokrągleniami. */
+
+/* --- bio: segmentowany odwłok, żuwaczki, odnóża, oczy zamiast kokpitu --- */
+function alienBio(c){
+  const {g,W,H,cx,r} = c;
+  const yTop=H*0.10, yBot=H*0.90, len=yBot-yTop;
+  const maxHalf = W*0.5*rr(r,.20,.34);
+
+  const nb = ri(r,2,3);
+  const bulges = [];
+  for(let i=0;i<nb;i++)
+    bulges.push({ c: 0.22 + 0.62*(nb===1?0.5:i/(nb-1)), w: rr(r,.11,.19), a: rr(r,.72,1.0) });
+  bulges[nb-1].a = 1.0;                       /* najgrubszy segment z tyłu */
+
+  const halfAt = (y) => {
+    const t = clamp((y-yTop)/len, 0, 1);
+    let m = 0;
+    for(const b of bulges){ const u=(t-b.c)/b.w; m = Math.max(m, b.a*Math.exp(-(u*u))); }
+    return maxHalf * m * Math.min(1, Math.min(t,1-t)*7 + 0.10);
+  };
+
+  for(let y=Math.round(yTop); y<=Math.round(yBot); y++){
+    const h = halfAt(y);
+    if(h < 0.45) continue;
+    for(let x=Math.round(cx-h); x<=Math.round(cx+h); x++) if(x>=0&&x<W) g[y*W+x]=HULL;
+  }
+
+  /* żuwaczki - dwa ramiona wyginające się do przodu i do środka */
+  const my = yTop + len*rr(r,.28,.42);
+  const mh = halfAt(my);
+  const reach = W*rr(r,.10,.22);
+  const tipY = yTop - len*rr(r,0,.08);
+  const mth = Math.max(1, Math.round(W*0.045));
+  if(mh >= 1){
+    for(const s of [-1,1])
+      strokeCurve(g,W,H,
+        [cx+s*mh, my],
+        [cx+s*(mh+reach), yTop+len*0.10],
+        [cx+s*Math.max(1,W*0.04), tipY],
+        mth, HULL);
+  }
+
+  /* odnóża */
+  const legs = ri(r,2,3);
+  const legTh = Math.max(1, Math.round(W*0.032));
+  for(let i=0;i<legs;i++){
+    const ly = yTop + len*(0.44 + 0.17*i);
+    const lh = halfAt(ly);
+    if(lh < 1) continue;
+    const out = W*rr(r,.10,.24), drop = len*rr(r,.06,.16);
+    for(const s of [-1,1])
+      strokeLine(g,W,H, cx+s*lh, ly, cx+s*(lh+out), ly+drop, legTh, HULL);
+  }
+
+  /* szwy energii w przewężeniach między segmentami */
+  for(let i=0;i+1<bulges.length;i++){
+    const y = Math.round(yTop + len*(bulges[i].c+bulges[i+1].c)/2);
+    const h = halfAt(y);
+    if(y<0||y>=H||h<1) continue;
+    for(let x=Math.round(cx-h*0.8); x<=Math.round(cx+h*0.8); x++)
+      if(x>=0&&x<W&&g[y*W+x]) g[y*W+x]=SEAM;
+  }
+
+  /* skupisko oczu - zamiast jednej kabiny */
+  const ey = yTop + len*rr(r,.16,.28);
+  const eh = halfAt(ey);
+  const eyes = ri(r,2,3);
+  for(let k=0;k<eyes;k++){
+    const off = eh*(0.22 + 0.55*(eyes===1?0:k/(eyes-1)));
+    for(const s of [-1,1]){
+      const X = clamp(Math.round(cx+s*off),0,W-1);
+      const Y = clamp(Math.round(ey + k*0.9),0,H-1);
+      if(g[Y*W+X]) g[Y*W+X]=EYE;
+    }
+  }
+
+  const tailH = Math.max(1, halfAt(yBot-1));
+  const vents = pick(r,[1,2,2]);
+  const vw = Math.max(1, Math.round(tailH*(vents===1 ? 1.1 : 0.6)));
+  return {
+    engineSpec: (vents===1 ? [0] : [-tailH*0.5, tailH*0.5]).map(dx=>({dx, w:vw, type:'plume'})),
+    gunSpec: r()<0.5 && mh>=1 ? [-Math.max(1,W*0.04), Math.max(1,W*0.04)].map(dx=>({dx})) : [],
+  };
+}
+
+/* --- kryształ: fasetowany wielokąt + oderwane odłamki zawieszone obok --- */
+function alienCrystal(c){
+  const {g,W,H,cx,cy,r} = c;
+  const R = W*0.5*rr(r,.32,.44);
+  const xs = rr(r,.70,1.00);
+  const n = ri(r,3,5);
+
+  const pts = [];
+  for(let i=0;i<=n;i++){
+    const a = -Math.PI/2 + Math.PI*i/n;
+    const rad = i===0 ? R*rr(r,.85,1.05) : i===n ? R*rr(r,.50,.85) : R*rr(r,.55,1.00);
+    pts.push([cx + Math.cos(a)*rad*xs, cy + Math.sin(a)*rad]);
+  }
+  const full = pts.concat(pts.slice(1,-1).reverse().map(p=>[2*cx-p[0], p[1]]));
+  fillPoly(g,W,H,full,HULL);
+  fillPoly(g,W,H, full.map(p=>[cx+(p[0]-cx)*0.55, cy+(p[1]-cy)*0.55]), LIGHT);
+  fillEllipse(g,W,H,cx,cy+H*0.03, Math.max(1,W*0.06), Math.max(1,W*0.085), CORE, m=>m!==EMPTY);
+
+  /* odłamki: co najmniej 3 px odstępu, żeby kontur ich nie skleił z rdzeniem */
+  const shards = ri(r,1,3);
+  for(let k=0;k<shards;k++){
+    const a = rr(r,.55,2.20);
+    const dist = R + 3 + W*rr(r,.02,.09);
+    const sx = cx + Math.sin(a)*dist*xs, sy = cy - Math.cos(a)*dist*0.9;
+    const size = Math.max(1.2, W*rr(r,.04,.09));
+    const tri = [[sx, sy-size],[sx+size*0.8, sy+size*0.7],[sx-size*0.8, sy+size*0.6]];
+    fillPoly(g,W,H,tri,HULL);
+    fillPoly(g,W,H,tri.map(p=>[2*cx-p[0], p[1]]),HULL);
+  }
+
+  return {
+    engineSpec: [{ dx:0, w:Math.max(1,Math.round(W*0.12)), type:'plume' }],
+    gunSpec: [],
+  };
+}
+
+/* --- pierścień: pustka w środku sylwetki, kapsuła zawieszona bez połączenia --- */
+function alienRing(c){
+  const {g,W,H,cx,cy,r} = c;
+  const R  = W*0.5*rr(r,.36,.46);
+  const ry = R*rr(r,.72,1.00);
+  const th = Math.max(1.2, R*rr(r,.22,.42));
+
+  fillEllipse(g,W,H,cx,cy,R,ry,HULL);
+  const iR = R-th, iry = ry-th;
+  if(iR>1 && iry>1){
+    fillEllipse(g,W,H,cx,cy,iR,iry,EMPTY);
+    fillEllipse(g,W,H,cx,cy,iR+1.2,iry+1.2,SEAM, m=>m===HULL);   /* poświata wewnętrznej krawędzi */
+  }
+
+  /* czasem podkowa zamiast pełnego pierścienia */
+  let horseshoe = false;
+  if(iR>1 && r()<0.40){
+    horseshoe = true;
+    const wa = rr(r,.25,.55), far = R*2.4;
+    const a1 = Math.PI/2-wa, a2 = Math.PI/2+wa;
+    fillPoly(g,W,H,[[cx,cy],
+      [cx+Math.cos(a1)*far, cy+Math.sin(a1)*far],
+      [cx+Math.cos(a2)*far, cy+Math.sin(a2)*far]], EMPTY);
+  }
+
+  /* kapsuła w środku: bez szprych zostaje floaterem i wisi w dziurze */
+  const inner = Math.min(iR, iry);
+  const podR = inner*rr(r,.35,.60);
+  if(podR>=1 && inner-podR>=3){
+    fillEllipse(g,W,H,cx,cy,podR,podR*rr(r,.9,1.3),HULL);
+    fillEllipse(g,W,H,cx,cy,podR*0.5,podR*0.55,CORE,m=>m!==EMPTY);
+    if(r()<0.45){
+      strokeLine(g,W,H, cx-podR, cy, cx-iR, cy, 1, HULL);
+      strokeLine(g,W,H, cx+podR, cy, cx+iR, cy, 1, HULL);
+    }
+  }
+
+  const off = horseshoe ? R*0.80 : R*0.55;
+  return {
+    engineSpec: [-off, off].map(dx=>({ dx, w:Math.max(1,Math.round(th)), type:'plume' })),
+    gunSpec: [],
+  };
+}
+
+/* --- promienisty: symetria N-krotna zamiast dwustronnej, brak dziobu i skrzydeł --- */
+function alienRadial(c){
+  const {g,W,H,cx,cy,r} = c;
+  const N = pick(r,[3,3,5,5,6]);
+  const hubR  = W*0.5*rr(r,.11,.20);
+  const armLen= W*0.5*rr(r,.30,.46);
+  const armW  = Math.max(1.2, hubR*rr(r,.45,.85));
+  const tipW  = armW*rr(r,.15,.60);
+  const pods  = r()<0.6;
+
+  for(let k=0;k<N;k++){
+    const a = -Math.PI/2 + 2*Math.PI*k/N;      /* jedno ramię zawsze w górę */
+    const ux=Math.cos(a), uy=Math.sin(a), px=-uy, py=ux;
+    const x0=cx+ux*hubR*0.4, y0=cy+uy*hubR*0.4;
+    const x1=cx+ux*armLen,   y1=cy+uy*armLen;
+    fillPoly(g,W,H,[
+      [x0+px*armW, y0+py*armW],[x1+px*tipW, y1+py*tipW],
+      [x1-px*tipW, y1-py*tipW],[x0-px*armW, y0-py*armW]], HULL);
+    if(pods) fillEllipse(g,W,H,x1,y1,Math.max(1,armW*0.95),Math.max(1,armW*0.95),HULL);
+  }
+  fillEllipse(g,W,H,cx,cy,hubR,hubR*rr(r,.85,1.15),HULL);
+  fillEllipse(g,W,H,cx,cy,hubR*0.5,hubR*0.5,CORE,m=>m!==EMPTY);
+
+  /* oczy na piaście zamiast kokpitu */
+  for(const s of [-1,1]){
+    const X=clamp(Math.round(cx+s*hubR*0.62),0,W-1), Y=clamp(Math.round(cy-hubR*0.35),0,H-1);
+    if(g[Y*W+X]) g[Y*W+X]=EYE;
+  }
+
+  return {
+    engineSpec: [{ dx:0, w:Math.max(1,Math.round(hubR)), type:'plume' }],
+    gunSpec: pods ? [{dx:0}] : [],
+  };
+}
+
+const ALIEN_ARCHETYPES = { bio:alienBio, crystal:alienCrystal, ring:alienRing, radial:alienRadial };
+
+function generateAlien(r, W, H, pal){
+  const g = new Uint8Array(W*H);
+  const cx = (W-1)/2, cy = (H-1)/2;
+  const arche = pick(r, Object.keys(ALIEN_ARCHETYPES));
+  const built = ALIEN_ARCHETYPES[arche]({ g, W, H, cx, cy, r });
+
+  mirrorLeftToRight(g,W,H);            /* idealna symetria niezależnie od zaokrągleń */
+
+  /* dysze: pozycja pionowa z rzeczywistego kształtu, wylot świeci zamiast być czarny */
+  const bot = bottomProfile(g,W,H);
+  const depth = Math.max(1, Math.round(H*0.035));
+  const engines = [];
+  for(const e of built.engineSpec){
+    const X = clamp(Math.round(cx+e.dx), 0, W-1);
+    const Y = bot[X];
+    if(Y < 0) continue;
+    engines.push({ x:cx+e.dx, y:Y, w:e.w, type:e.type });
+    const half=(e.w-1)/2;
+    for(let x=Math.round(cx+e.dx-half); x<=Math.round(cx+e.dx+half); x++)
+      for(let d=0; d<depth; d++){
+        const y=Y-d;
+        if(x<0||x>=W||y<0) continue;
+        if(g[y*W+x]) g[y*W+x]=CORE;
+      }
+  }
+
+  /* działka jako kolce wyrastające z góry sylwetki */
+  const top = topProfile(g,W,H);
+  const guns = [];
+  for(const gs of built.gunSpec){
+    const X = clamp(Math.round(cx+gs.dx), 0, W-1);
+    const ty = top[X];
+    if(ty < 0) continue;
+    const glen = Math.max(2, Math.round(H*rr(r,.05,.09)));
+    for(let d=1; d<=glen; d++){ const y=ty-d; if(y<0) break; g[y*W+X]=GUN; }
+    guns.push({ x:X, y:Math.max(0, ty-glen) });
+  }
+
+  mirrorLeftToRight(g,W,H);            /* grawerunek też ma być symetryczny */
+
+  applyShading(g,W,H,{ ridge:false });
+  applyOutline(g,W,H);
+  const floaters = splitFloaters(g,W,H, Math.max(2, Math.round(W*H*0.0015)), r);
+
+  return { g, W, H, pal, engines, guns, lamps:[], floaters, arche };
+}
+
+/* ═══════════════════════ animowany render ═══════════════════════ */
+
+const noise = (t) => Math.sin(t)*0.55 + Math.sin(t*2.37+1.7)*0.3 + Math.sin(t*5.11+4.2)*0.15;
+
+class ShipView {
+  constructor(ship, scale){
+    this.ship = ship;
+    this.flameZone = Math.max(6, Math.round(ship.H*0.55));
+    this.bw = ship.W;
+    this.bh = ship.H + this.flameZone;
+    this.canvas = document.createElement('canvas');
+    this.canvas.width = this.bw;
+    this.canvas.height = this.bh;
+    this.canvas.style.width  = (this.bw*scale)+'px';
+    this.canvas.style.height = (this.bh*scale)+'px';
+    this.ctx = this.canvas.getContext('2d');
+    this.img = this.ctx.createImageData(this.bw, this.bh);
+    this.bullets = [];
+    this.nextShot = Math.random()*0.5;
+  }
+
+  px(x,y,c){
+    x=Math.round(x); y=Math.round(y);
+    if(x<0||y<0||x>=this.bw||y>=this.bh) return;
+    const i=(y*this.bw+x)*4, d=this.img.data;
+    d[i]=c[0]; d[i+1]=c[1]; d[i+2]=c[2]; d[i+3]=255;
+  }
+
+  /* kolor jednego piksela kadłuba - wspólny dla bryły głównej i dla floaterów */
+  materialColor(m, x, y, t, opt, thr){
+    const pal = this.ship.pal;
+    const c = pal[m];
+    const mul = (k, add=0) => [ clamp(Math.round(c[0]*k+add),0,255),
+                                clamp(Math.round(c[1]*k+add),0,255),
+                                clamp(Math.round(c[2]*k+add),0,255) ];
+    switch(m){
+      case NOZZLE: {
+        if(thr<=0) return c;
+        const heat = thr*(0.65+0.35*noise(t*9+x));
+        return [ Math.round(c[0]+(pal.flame[0]-c[0])*heat),
+                 Math.round(c[1]+(pal.flame[1]-c[1])*heat),
+                 Math.round(c[2]+(pal.flame[2]-c[2])*heat) ];
+      }
+      case LAMP:
+        if(!opt.lights) return pal[DARK];
+        return mul(0.35 + 0.65*Math.pow(Math.sin(t*2.6 + x*0.7)*0.5+0.5, 3), 20);
+      case COCKPIT:
+        return opt.lights ? mul(0.85 + 0.15*Math.sin(t*1.7)) : c;
+      case CORE:                       /* rdzeń jaśnieje z ciągiem, oddycha wolno */
+        return mul(0.55 + 0.30*Math.sin(t*1.9 + y*0.25) + 0.30*thr, 10);
+      case SEAM:                       /* fala energii biegnąca wzdłuż szwu */
+        return opt.lights ? mul(0.5 + 0.5*Math.sin(t*2.2 - y*0.55 + x*0.2)) : mul(0.45);
+      case EYE:                        /* oczy migoczą szybciej i nieregularnie */
+        return opt.lights ? mul(0.30 + 0.70*Math.pow(Math.sin(t*3.1 + x*0.9 + y*0.4)*0.5+0.5, 2), 15) : mul(0.35);
+      default:
+        return c;
+    }
+  }
+
+  draw(t, dt, opt){
+    const {g,W,H,pal,engines,guns} = this.ship;
+    const floaters = this.ship.floaters || [];
+    this.img.data.fill(0);
+
+    const thr = opt.throttle;
+
+    /* --- bryła główna --- */
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      const m = g[y*W+x];
+      if(m!==EMPTY) this.px(x, y, this.materialColor(m,x,y,t,opt,thr));
+    }
+
+    /* --- części zawieszone: własny, powolny dryf - najsilniejszy sygnał "nie nasza technika" --- */
+    for(const fl of floaters){
+      const ox = Math.round(Math.cos(t*fl.speed*0.7 + fl.phase) * fl.amp * 0.7);
+      const oy = Math.round(Math.sin(t*fl.speed + fl.phase) * fl.amp);
+      for(const cell of fl.cells)
+        this.px(cell.x+ox, cell.y+oy, this.materialColor(cell.m, cell.x, cell.y, t, opt, thr));
+    }
+
+    /* --- napęd --- */
+    if(thr > 0.02) engines.forEach((e,ei)=>{
+      if(e.type === 'plume') this.drawPlume(e, ei, t, thr);
+      else                   this.drawFlame(e, ei, t, thr);
+    });
+
+    /* --- działka --- */
+    if(opt.fire && guns.length){
+      this.nextShot -= dt;
+      if(this.nextShot<=0){
+        this.nextShot = 0.55;
+        for(const gp of guns) this.bullets.push({x:gp.x, y:gp.y-1, age:0});
+      }
+      const speed = H*1.9;
+      for(const b of this.bullets){
+        b.age += dt; b.y -= speed*dt;
+        if(b.age < 0.07){
+          this.px(b.x, gunMuzzleY(guns,b.x), [255,255,255]);
+          this.px(b.x-1, gunMuzzleY(guns,b.x), pal.flame);
+          this.px(b.x+1, gunMuzzleY(guns,b.x), pal.flame);
+        }
+        this.px(b.x, b.y, [255,255,255]);
+        this.px(b.x, b.y+1, pal[LAMP]);
+      }
+      this.bullets = this.bullets.filter(b=>b.y > -4);
+    } else {
+      this.bullets.length = 0;
+    }
+
+    this.ctx.putImageData(this.img,0,0);
+  }
+
+  /* ogień chemiczny: wąski, gorący rdzeń, ostre pasma, ogon rozmyty ditheringiem */
+  drawFlame(e, ei, t, thr){
+    const {H,pal} = this.ship;
+    const maxLen = H*0.42*thr;
+    const core=[255,250,225], mid=pal.flame;
+    const tail=[ Math.round(mid[0]*0.75), Math.round(mid[1]*0.35), Math.round(mid[2]*0.3) ];
+    const half=(e.w-1)/2;
+    for(let x=Math.round(e.x-half); x<=Math.round(e.x+half); x++){
+      const off = Math.abs(x-e.x)/(half+0.5);
+      const L = maxLen*(1-off*off*0.85)*(0.72 + 0.34*noise(t*11 + ei*3.1 + x*0.9));
+      for(let i=0;i<L;i++){
+        const f = i/Math.max(1,L);
+        if(f>0.62 && ((x+i+Math.floor(t*20))%2)) continue;
+        if(f>0.85 && ((x*2+i)%3)) continue;
+        this.px(x, e.y+1+i, f<0.18 ? core : f<0.5 ? mid : tail);
+      }
+    }
+  }
+
+  /* poświata energetyczna: bez białego rdzenia, szeroki stożek, gęstość opadająca
+     ditheringiem - czyta się jako pole siłowe, nie jako spalanie paliwa */
+  drawPlume(e, ei, t, thr){
+    const {H,pal} = this.ship;
+    const L = Math.max(1, H*0.30*thr*(0.85 + 0.30*noise(t*6 + ei*2.7)));
+    const c0 = pal[CORE], c1 = pal.plume, c2 = pal[SEAM];
+    for(let i=0;i<L;i++){
+      const f = i/L;
+      const halfW = (e.w/2)*(1 + f*1.9);
+      const lim = Math.ceil(halfW);
+      for(let dx=-lim; dx<=lim; dx++){
+        if(Math.abs(dx) > halfW) continue;
+        const edge = Math.abs(dx)/(halfW+0.001);
+        const density = (1 - f*0.80) * (1 - edge*0.65);
+        const x = Math.round(e.x+dx), y = e.y+1+i;
+        if(((x*3 + y*5 + Math.floor(t*9)) % 8)/8 > density) continue;
+        this.px(x, y, f<0.28 ? c0 : f<0.68 ? c1 : c2);
+      }
+    }
+  }
+}
+function gunMuzzleY(guns,x){
+  for(const g of guns) if(g.x===x) return g.y-1;
+  return 0;
+}
+
+/* ═══════════════════════ UI ═══════════════════════ */
+
+const el = id => document.getElementById(id);
+const views = [];
+let opt = { throttle:0.75, fire:true, lights:true };
+
+function scaleFor(size){ return Math.max(1, Math.round(120/size)); }
+
+const GENERATORS = { A:generateA, B:generateB, C:generateAlien };
+
+function buildOne(container, kind, seed, size){
+  const pal = makePalette(mulberry32(seed ^ 0x9e3779b9), kind==='C');
+  const ship = GENERATORS[kind](mulberry32(seed), size, size, pal);
+  const view = new ShipView(ship, scaleFor(size));
+
+  const cell = document.createElement('div');
+  cell.className = 'cell';
+  cell.appendChild(view.canvas);
+  cell.title = 'kliknij, żeby przelosować';
+  cell.addEventListener('click', ()=>{
+    const idx = views.indexOf(view);
+    const fresh = buildOne(null, kind, (Math.random()*1e9)|0, size);
+    cell.replaceChild(fresh.canvas, view.canvas);
+    views[idx] = fresh;
+  });
+  if(container) container.appendChild(cell);
+  return view;
+}
+
+function rebuild(){
+  const size = +el('size').value;
+  const seedBase = hashSeed(el('seed').value);
+  views.length = 0;
+  for(const kind of Object.keys(GENERATORS)){
+    const grid = el('grid'+kind);
+    grid.innerHTML = '';
+    for(let i=0;i<SHIPS_PER_METHOD;i++){
+      const s = (seedBase + i*2654435761) | 0;
+      views.push(buildOne(grid, kind, s, size));
+    }
+  }
+}
+
+function hashSeed(str){
+  let h = 2166136261;
+  for(let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h|0;
+}
+
+let last = performance.now()/1000;
+function loop(){
+  const now = performance.now()/1000;
+  const dt = Math.min(0.05, now-last); last = now;
+  for(const v of views) v.draw(now, dt, opt);
+  requestAnimationFrame(loop);
+}
+
+el('size').addEventListener('input', e=>{ el('sizeV').textContent = e.target.value; rebuild(); });
+el('thr').addEventListener('input', e=>{
+  el('thrV').textContent = e.target.value+'%';
+  opt.throttle = +e.target.value/100;
+});
+el('seed').addEventListener('change', rebuild);
+el('reroll').addEventListener('click', ()=>{
+  el('seed').value = String((Math.random()*1e9)|0);
+  rebuild();
+});
+el('fire').addEventListener('change', e=>{ opt.fire = e.target.checked; });
+el('lights').addEventListener('change', e=>{ opt.lights = e.target.checked; });
+
+rebuild();
+loop();
+</script>
+</body>
+</html>

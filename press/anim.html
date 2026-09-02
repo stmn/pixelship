@@ -1,0 +1,68 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;background:#131721;overflow:hidden}
+#stage{display:block;image-rendering:pixelated}</style>
+<body>
+<!-- app.js drives the whole UI, so it gets the DOM it expects; we only borrow ShipView -->
+<div id="intro" style="display:none"><canvas id="introCanvas"></canvas></div>
+<div style="display:none">
+  <div id="panel"></div><button id="resetAll"></button><input type="text" id="seed" value="1">
+  <button id="reroll"></button><button id="showLib"></button><button id="expPng"></button><button id="expMounts"></button>
+  <button id="expSheet"></button><span id="notice"></span><header id="brand"></header>
+  <canvas id="hero"></canvas><div id="heroMeta"></div><div id="gallery"></div><div id="library"></div>
+</div>
+<canvas id="stage"></canvas>
+<script src="../lab/shape.js"></script><script src="../lab/shading.js"></script>
+<script src="../lab/palette.js"></script><script src="../lab/mounts.js"></script>
+<script src="../lab/compose.js"></script><script src="../lab/bank.js"></script>
+<script src="../lab/families.js"></script><script src="../lab/controls.js"></script>
+<script src="../lab/sprite.js"></script>
+<script src="../app/storage.js"></script><script src="../app/icons.js"></script>
+<script src="../app/pixelfont.js"></script><script src="../app/app.js"></script>
+<script>
+/* ── deterministic frame renderer ──────────────────────────────────────────
+   FRAMES is the whole loop. Exhaust cycles every 8 frames, banking traces a
+   full left-right-left sweep over 16, so 16 closes both at once.            */
+/* gaps and padding scale with SCALE, so halving the scale halves the whole
+   image exactly instead of leaving fixed margins behind */
+var FRAMES = 16, SCALE = 4, SIZE = 44, THROTTLE = 0.85;
+var GAP = 4 * SCALE, PAD = 3.5 * SCALE;   /* half of what SCALE 4 used */
+var PICKS = [
+  ["Raider", 1337], ["Interceptor", 90210], ["Manta", 424242],
+  ["Dreadnought", 7777], ["Shard", 31337]
+];
+var C = window.PixelShipCompose, App = window.PixelshipApp, FAM = window.PixelshipFamilies;
+App.state.bankPoses = 5; App.state.bankAngle = 40; App.state.bankHeight = 1.6;
+
+var views = PICKS.map(function (p) {
+  var ship = C.composeShip(p[1], SIZE, FAM.byName(p[0]).opts);
+  ship.poses = window.PixelshipBank.bankPoses(ship, 5, 40, { heightScale: 1.6 });
+  return new App.ShipView(ship, 1);
+});
+
+var cw = views.reduce(function (n, v) { return n + v.bw * SCALE; }, 0) + GAP * (views.length - 1) + PAD * 2;
+var chh = Math.max.apply(null, views.map(function (v) { return v.bh * SCALE; })) + PAD * 2;
+var stage = document.getElementById('stage');
+stage.width = cw; stage.height = chh;
+document.body.style.width = cw + 'px';
+var ctx = stage.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function render(f) {
+  ctx.fillStyle = '#131721';
+  ctx.fillRect(0, 0, cw, chh);
+  var x = PAD;
+  views.forEach(function (v, i) {
+    /* exhaust loop is 8 frames; the bank sweep is a triangle over all 16 */
+    var phase = (f % 8) / 8;
+    var poses = v.ship.poses.length, half = (poses - 1) / 2;
+    var bank = Math.round(half + half * Math.sin(2 * Math.PI * (f / FRAMES + i * 0.09)));
+    v.drawFrame(phase, THROTTLE, bank);
+    ctx.drawImage(v.canvas, x, PAD, v.bw * SCALE, v.bh * SCALE);
+    x += v.bw * SCALE + GAP;
+  });
+}
+var f = parseInt((location.search.match(/f=(\d+)/) || [])[1] || '0', 10) % FRAMES;
+render(f);
+document.title = 'frame ' + f + ' of ' + FRAMES + ' - ' + cw + 'x' + chh;
+</script>
+</body>

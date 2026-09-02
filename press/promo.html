@@ -1,0 +1,93 @@
+<!doctype html><meta charset="utf-8">
+<style>html,body{margin:0;overflow:hidden}
+body{background:transparent}
+#stage{display:block;image-rendering:pixelated}</style>
+<body>
+<div id="intro" style="display:none"><canvas id="introCanvas"></canvas></div>
+<div style="display:none">
+  <div id="panel"></div><button id="resetAll"></button><input type="text" id="seed" value="1">
+  <button id="reroll"></button><button id="showLib"></button><button id="expPng"></button><button id="expMounts"></button>
+  <button id="expSheet"></button><span id="notice"></span><header id="brand"></header>
+  <canvas id="hero"></canvas><div id="heroMeta"></div><div id="gallery"></div><div id="library"></div>
+</div>
+<canvas id="stage"></canvas>
+<script src="../lab/shape.js"></script><script src="../lab/shading.js"></script>
+<script src="../lab/palette.js"></script><script src="../lab/mounts.js"></script>
+<script src="../lab/compose.js"></script><script src="../lab/bank.js"></script>
+<script src="../lab/families.js"></script><script src="../lab/controls.js"></script>
+<script src="../lab/sprite.js"></script>
+<script src="../app/storage.js"></script><script src="../app/icons.js"></script>
+<script src="../app/pixelfont.js"></script><script src="../app/app.js"></script>
+<script>
+var C=window.PixelShipCompose, App=window.PixelshipApp, FAM=window.PixelshipFamilies, PF=window.PixelFont;
+var kind=(location.search.match(/k=(\w+)/)||[])[1]||'social';
+var stage=document.getElementById('stage'), ctx=stage.getContext('2d');
+
+function ship(fam,seed,size){ return C.composeShip(seed,size,FAM.byName(fam).opts); }
+function paint(sh,x,y,sc){
+  for(var yy=0;yy<sh.H;yy++)for(var xx=0;xx<sh.W;xx++){
+    var m=sh.mats[yy*sh.W+xx]; if(!m) continue;
+    var c=C.colorFor(m,sh.steps[yy*sh.W+xx],sh.pal,sh.rampSteps);
+    ctx.fillStyle='rgb('+c[0]+','+c[1]+','+c[2]+')';
+    ctx.fillRect(x+xx*sc,y+yy*sc,sc,sc);
+  }
+}
+/* one fleet row, centred, returns the height it used */
+function fleetRow(seeds,size,sc,y,famList){
+  var total=seeds.length*(size*sc)+(seeds.length-1)*(6*sc);
+  var x=Math.round((stage.width-total)/2);
+  seeds.forEach(function(sd,i){
+    paint(ship(famList[i%famList.length],sd,size),x,y,sc);
+    x+=size*sc+6*sc;
+  });
+  return size*sc;
+}
+function setup(w,h,bg){
+  stage.width=w; stage.height=h; document.body.style.width=w+'px';
+  ctx.imageSmoothingEnabled=false;
+  if(bg){ ctx.fillStyle=bg; ctx.fillRect(0,0,w,h); }
+}
+function centreCanvas(cv,y){ ctx.drawImage(cv,Math.round((stage.width-cv.width)/2),y); }
+
+var FAMS=['Raider','Interceptor','Manta','Dreadnought','Shard','Hive','Radial'];
+var SEEDS=[1337,90210,424242,7777,31337,5150,8080,2600,1234,9001];
+
+if(kind==='social'){                       /* 1200x630 open graph */
+  setup(1200,630,'#0b0e14');
+  var g=ctx.createRadialGradient(600,250,40,600,250,700);
+  g.addColorStop(0,'#1a2440'); g.addColorStop(1,'#05070c');
+  ctx.fillStyle=g; ctx.fillRect(0,0,1200,630);
+  fleetRow(SEEDS.slice(0,7),40,4,86,FAMS);
+  centreCanvas(PF.render('PIXELSHIP',{scale:10,color:'#eaf1ff',shadow:{dx:0,dy:1,color:'#16203a'}}),330);
+  centreCanvas(PF.render('PROCEDURAL SPACESHIP GENERATOR',{scale:3,color:'#9db0d0'}),440);
+  fleetRow(SEEDS.slice(3,10),36,4,506,FAMS.slice(2).concat(FAMS.slice(0,2)));
+}
+else if(kind==='wide'){                    /* 1680x720 = 21:9 */
+  setup(1680,720,'#0b0e14');
+  var g2=ctx.createLinearGradient(0,0,0,720);
+  g2.addColorStop(0,'#16203a'); g2.addColorStop(1,'#05070c');
+  ctx.fillStyle=g2; ctx.fillRect(0,0,1680,720);
+  fleetRow(SEEDS.slice(0,9),44,4,60,FAMS);
+  centreCanvas(PF.render('PIXELSHIP',{scale:12,color:'#eaf1ff',shadow:{dx:0,dy:1,color:'#16203a'}}),330);
+  centreCanvas(PF.render('PROCEDURAL SPACESHIP GENERATOR',{scale:3,color:'#9db0d0'}),450);
+  fleetRow(SEEDS.slice(2,11),40,4,530,FAMS.slice(3).concat(FAMS.slice(0,3)));
+}
+else if(kind==='logo'){                    /* transparent, horizontal */
+  setup(1000,240,null);
+  var sh=ship('Raider',1337,40);
+  paint(sh,26,26,4);
+  var t=PF.render('PIXELSHIP',{scale:9,color:'#ffffff',outline:{color:'#0b0e14',width:1}});
+  ctx.drawImage(t,214,52);
+  var s=PF.render('PROCEDURAL SPACESHIP GENERATOR',{scale:2,color:'#c9d6ee',outline:{color:'#0b0e14',width:1}});
+  ctx.drawImage(s,220,152);
+}
+else if(kind==='favicon'){
+  /* Designed AT 16px and scaled 16x, not designed big and shrunk: a favicon is
+     read at 16px and a thin hull disappears there. This one was picked by
+     measuring silhouette fill and aspect at the target size. */
+  setup(256,256,null);
+  var f=ship('Manta',-809475032,16);
+  paint(f,Math.round((256-f.W*16)/2),Math.round((256-f.H*16)/2),16);
+}
+document.title=kind+' '+stage.width+'x'+stage.height;
+</script></body>

@@ -1,0 +1,21 @@
+# build output - regenerate with `node build.js`, then zip
+dist/
+dist-game/
+*.zip
+
+# scratch renders from the node dev tools
+lab/out/
+preview-*.png
+
+# the second, superseded CA generator: an agent built it in parallel with
+# lab/shape.js before that file existed. Kept on disk for reference, not in
+# history - lab/shape.js is the one the project uses.
+lab/_superseded/
+
+.DS_Store
+
+# the itch.io upload playbook and the page copy: local publishing notes, not
+# a republish kit for whoever clones this
+ITCH.md
+press/itch-description.html
+press/sprites-demo-description.html

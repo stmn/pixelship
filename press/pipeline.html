@@ -1,0 +1,28 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="_base.css">
+<body><div class="wrap">
+<div class="h" id="t"></div>
+<div class="sub">One seed, every stage. These are real intermediate buffers, not illustrations.</div>
+<div class="row">
+  <div class="stage"><div class="frame"><img src="ca_0.png" width="150"></div>
+    <div class="cap">1 · seed</div><div class="note">Random fill inside a shaped probability field, mirrored</div></div>
+  <div class="arrow">›</div>
+  <div class="stage"><div class="frame"><img src="ca_2.png" width="150"></div>
+    <div class="cap">2 · automaton</div><div class="note">Neighbour-count smoothing carves a coherent hull</div></div>
+  <div class="arrow">›</div>
+  <div class="stage"><div class="frame"><img src="p1_mask.png" width="150"></div>
+    <div class="cap">3 · silhouette</div><div class="note">Nose taper and wing bulges give it a front and a back</div></div>
+  <div class="arrow">›</div>
+  <div class="stage"><div class="frame"><img src="p2_mounts.png" width="150"></div>
+    <div class="cap">4 · hardpoints</div><div class="note">Thrusters and guns detected from the shape itself</div></div>
+  <div class="arrow">›</div>
+  <div class="stage"><div class="frame"><img src="p3_shading.png" width="150"></div>
+    <div class="cap">5 · light</div><div class="note">Distance field to normals, ambient occlusion, 5 ramp steps</div></div>
+  <div class="arrow">›</div>
+  <div class="stage"><div class="frame"><img src="p4_final.png" width="150"></div>
+    <div class="cap">6 · palette</div><div class="note">Hue-shifted ramp mapped onto the shading steps</div></div>
+</div>
+<div class="foot">Shading is mirror-exact: 0 mismatched pixels out of 569 842 checked.</div>
+</div>
+<script src="../app/pixelfont.js"></script>
+<script>document.getElementById("t").appendChild(PixelFont.render("HOW A SHIP IS MADE",{scale:4,color:"#eaf1ff"}));</script>
+</body>

@@ -1,0 +1,21 @@
+<!doctype html><meta charset="utf-8"><link rel="stylesheet" href="_base.css">
+<style>.fam{display:grid;grid-template-columns:180px 1fr;align-items:center;gap:0 22px;
+  padding:11px 0;border-bottom:1px solid #161d2c}
+.fam:last-child{border-bottom:0}
+.fname{font-size:13px;font-weight:700;letter-spacing:.05em;color:#eaf1ff}
+.fdesc{grid-column:1;font-size:11.5px;color:#8794ad;margin-top:2px}
+.fam img{grid-column:2;grid-row:1/3}</style>
+<body><div class="wrap"><div class="h" id="t"></div>
+<div class="sub">Seven families, the same four seeds in every row. Each one is a different corner of the same 33 knobs.</div>
+<div class="fam"><div class="fname">Raider</div><div class="fdesc">Narrow hull, broad swept wings</div><img src="fam_raider.png" width="470"></div>
+<div class="fam"><div class="fname">Interceptor</div><div class="fdesc">Long and thin, small fins</div><img src="fam_interceptor.png" width="470"></div>
+<div class="fam"><div class="fname">Dreadnought</div><div class="fdesc">Wide, heavy, blunt nose</div><img src="fam_dreadnought.png" width="470"></div>
+<div class="fam"><div class="fname">Manta</div><div class="fdesc">Low delta, almost all wing</div><img src="fam_manta.png" width="470"></div>
+<div class="fam"><div class="fname">Hive</div><div class="fdesc">Organic, lumpy, waisted</div><img src="fam_hive.png" width="470"></div>
+<div class="fam"><div class="fname">Shard</div><div class="fdesc">Angular, pierced, spiky</div><img src="fam_shard.png" width="470"></div>
+<div class="fam"><div class="fname">Radial</div><div class="fdesc">N-fold symmetry, not bilateral</div><img src="fam_radial.png" width="470"></div>
+<div class="foot">Every knob in the panel is verified to change the output: 33 live, 0 dead.</div>
+</div>
+<script src="../app/pixelfont.js"></script>
+<script>document.getElementById("t").appendChild(PixelFont.render("SHIP FAMILIES",{scale:4,color:"#eaf1ff"}));</script>
+</body>
